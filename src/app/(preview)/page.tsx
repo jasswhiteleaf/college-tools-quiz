@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { experimental_useObject } from 'ai/react';
 import {
   questionsSchema,
@@ -10,7 +10,7 @@ import {
 } from '@/lib/schemas';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { FileUp, Plus, Loader2 } from 'lucide-react';
+import { FileUp, Plus, Loader2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -24,12 +24,13 @@ import { Progress } from '@/components/ui/progress';
 import Quiz from '@/components/quiz';
 import Flashcards from '@/components/flashcards';
 import Matching from '@/components/matching';
-import ModeSwitcher from '@/components/mode-switcher';
+import TabsNavigation from '@/components/tabs-navigation';
 import { Link } from '@/components/ui/link';
 import { generateQuizTitle } from './actions';
 import { AnimatePresence, motion } from 'framer-motion';
+import { debugLog } from '@/lib/utils';
 
-export default function ChatWithFiles() {
+export default function LearningTool() {
   const [files, setFiles] = useState<File[]>([]);
   const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>(
     []
@@ -41,11 +42,12 @@ export default function ChatWithFiles() {
     z.infer<typeof matchingItemsSchema>
   >([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [title, setTitle] = useState<string>();
-  const [learningMode, setLearningMode] = useState<LearningMode>('quiz');
-  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
-  const [isGeneratingMatching, setIsGeneratingMatching] = useState(false);
+  const [title, setTitle] = useState<string>('Learning Material');
+  const [learningMode, setLearningMode] = useState<LearningMode>('flashcards');
+  const [pdfUploaded, setPdfUploaded] = useState(false);
+  const [isProcessingAll, setIsProcessingAll] = useState(false);
 
+  // Quiz generation
   const {
     submit: submitQuiz,
     object: partialQuestions,
@@ -53,16 +55,21 @@ export default function ChatWithFiles() {
   } = experimental_useObject({
     api: '/api/generate-quiz',
     schema: questionsSchema,
-    initialValue: undefined,
+    initialValue: [],
     onError: (error) => {
+      console.error('Quiz generation error:', error);
       toast.error('Failed to generate quiz. Please try again.');
-      setFiles([]);
     },
     onFinish: ({ object }) => {
-      setQuestions(object ?? []);
+      console.log('Quiz generated:', object);
+      if (object && Array.isArray(object)) {
+        setQuestions(object);
+      }
+      checkAllProcessingComplete();
     },
   });
 
+  // Flashcards generation
   const {
     submit: submitFlashcards,
     object: partialFlashcards,
@@ -70,17 +77,21 @@ export default function ChatWithFiles() {
   } = experimental_useObject({
     api: '/api/generate-flashcards',
     schema: flashcardsSchema,
-    initialValue: undefined,
+    initialValue: [],
     onError: (error) => {
+      console.error('Flashcards generation error:', error);
       toast.error('Failed to generate flashcards. Please try again.');
-      setIsGeneratingFlashcards(false);
     },
     onFinish: ({ object }) => {
-      setFlashcards(object ?? []);
-      setIsGeneratingFlashcards(false);
+      console.log('Flashcards generated:', object);
+      if (object && Array.isArray(object)) {
+        setFlashcards(object);
+      }
+      checkAllProcessingComplete();
     },
   });
 
+  // Matching generation
   const {
     submit: submitMatching,
     object: partialMatching,
@@ -88,17 +99,72 @@ export default function ChatWithFiles() {
   } = experimental_useObject({
     api: '/api/generate-matching',
     schema: matchingItemsSchema,
-    initialValue: undefined,
+    initialValue: [],
     onError: (error) => {
+      console.error('Matching generation error:', error);
       toast.error('Failed to generate matching game. Please try again.');
-      setIsGeneratingMatching(false);
     },
     onFinish: ({ object }) => {
-      setMatchingItems(object ?? []);
-      setIsGeneratingMatching(false);
+      console.log('Matching items generated:', object);
+
+      // Handle potential undefined object
+      if (!object) {
+        console.error('Invalid matching items received: undefined');
+        setMatchingItems([]);
+        checkAllProcessingComplete();
+        return;
+      }
+
+      // Ensure object is an array
+      if (Array.isArray(object)) {
+        console.log(
+          `Setting ${object.length} matching items to state:`,
+          object
+        );
+
+        // Validate each item in the array
+        const validItems = object.filter(
+          (item) =>
+            item &&
+            typeof item === 'object' &&
+            item.id &&
+            typeof item.term === 'string' &&
+            item.term.length > 0 &&
+            typeof item.definition === 'string' &&
+            item.definition.length > 0
+        );
+
+        if (validItems.length > 0) {
+          setMatchingItems(validItems);
+          debugLog('Matching items set successfully:', validItems);
+        } else {
+          console.error('No valid matching items found in response');
+          setMatchingItems([]);
+        }
+      } else {
+        console.error('Invalid matching items received:', object);
+        setMatchingItems([]);
+      }
+
+      checkAllProcessingComplete();
     },
   });
 
+  // Check if all processing is complete
+  const checkAllProcessingComplete = () => {
+    console.log('Checking processing status:', {
+      quiz: isLoadingQuiz,
+      flashcards: isLoadingFlashcards,
+      matching: isLoadingMatching,
+    });
+
+    if (!isLoadingQuiz && !isLoadingFlashcards && !isLoadingMatching) {
+      setIsProcessingAll(false);
+      toast.success('All learning materials generated!');
+    }
+  };
+
+  // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
@@ -113,7 +179,6 @@ export default function ChatWithFiles() {
     const validFiles = selectedFiles.filter(
       (file) => file.type === 'application/pdf' && file.size <= 5 * 1024 * 1024
     );
-    console.log(validFiles);
 
     if (validFiles.length !== selectedFiles.length) {
       toast.error('Only PDF files under 5MB are allowed.');
@@ -122,6 +187,7 @@ export default function ChatWithFiles() {
     setFiles(validFiles);
   };
 
+  // Encode file as base64
   const encodeFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -131,8 +197,23 @@ export default function ChatWithFiles() {
     });
   };
 
+  // Handle form submission
   const handleSubmitWithFiles = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (files.length === 0) {
+      toast.error('Please select a PDF file first.');
+      return;
+    }
+
+    // Reset previous content
+    setQuestions([]);
+    setFlashcards([]);
+    setMatchingItems([]);
+
+    setIsProcessingAll(true);
+    setPdfUploaded(true);
+
     const encodedFiles = await Promise.all(
       files.map(async (file) => ({
         name: file.name,
@@ -145,61 +226,36 @@ export default function ChatWithFiles() {
     const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
     setTitle(generatedTitle);
 
-    // Submit based on current mode
-    if (learningMode === 'quiz') {
-      submitQuiz({ files: encodedFiles });
-    } else if (learningMode === 'flashcards') {
-      submitFlashcards({ files: encodedFiles });
-      setIsGeneratingFlashcards(true);
-    } else if (learningMode === 'matching') {
+    // Generate all learning materials in parallel
+    submitQuiz({ files: encodedFiles });
+    submitFlashcards({ files: encodedFiles });
+
+    // Add a small delay before submitting matching to avoid potential race conditions
+    setTimeout(() => {
+      console.log('Submitting matching generation request');
       submitMatching({ files: encodedFiles });
-      setIsGeneratingMatching(true);
-    }
+    }, 1000); // Increased delay to 1 second
+
+    toast.info('Generating learning materials from your PDF...');
   };
 
+  // Reset everything
   const clearPDF = () => {
     setFiles([]);
     setQuestions([]);
     setFlashcards([]);
     setMatchingItems([]);
+    setPdfUploaded(false);
+    setTitle('Learning Material');
   };
 
-  const handleModeChange = async (mode: LearningMode) => {
+  // Handle mode change
+  const handleModeChange = (mode: LearningMode) => {
+    console.log(`Changing mode to: ${mode}`);
     setLearningMode(mode);
-
-    // If we already have files but not the content for the selected mode, generate it
-    if (files.length > 0) {
-      const encodedFiles = await Promise.all(
-        files.map(async (file) => ({
-          name: file.name,
-          type: file.type,
-          data: await encodeFileAsBase64(file),
-        }))
-      );
-
-      if (
-        mode === 'flashcards' &&
-        flashcards.length === 0 &&
-        !isGeneratingFlashcards
-      ) {
-        submitFlashcards({ files: encodedFiles });
-        setIsGeneratingFlashcards(true);
-        toast.info('Generating flashcards...');
-      } else if (
-        mode === 'matching' &&
-        matchingItems.length === 0 &&
-        !isGeneratingMatching
-      ) {
-        submitMatching({ files: encodedFiles });
-        setIsGeneratingMatching(true);
-        toast.info('Generating matching game...');
-      } else if (mode === 'quiz' && questions.length === 0 && !isLoadingQuiz) {
-        submitQuiz({ files: encodedFiles });
-        toast.info('Generating quiz...');
-      }
-    }
   };
 
+  // Calculate progress for each mode
   const quizProgress = partialQuestions
     ? (partialQuestions.length / 4) * 100
     : 0;
@@ -210,75 +266,239 @@ export default function ChatWithFiles() {
     ? (partialMatching.length / 6) * 100
     : 0;
 
-  // Determine if we should show content based on the current mode
-  const showQuiz = learningMode === 'quiz' && questions.length === 4;
-  const showFlashcards =
-    learningMode === 'flashcards' && flashcards.length === 8;
-  const showMatching =
-    learningMode === 'matching' && matchingItems.length === 6;
+  // Determine if each mode has content
+  const hasQuizContent = questions.length > 0;
+  const hasFlashcardsContent = flashcards.length > 0;
+  const hasMatchingContent =
+    matchingItems.length > 0 &&
+    matchingItems.every(
+      (item) => item && item.id && item.term && item.definition
+    );
+
+  // Log detailed content information
+  useEffect(() => {
+    console.log('Content details:', {
+      quiz: {
+        hasContent: hasQuizContent,
+        count: questions.length,
+        items: questions,
+      },
+      flashcards: {
+        hasContent: hasFlashcardsContent,
+        count: flashcards.length,
+        items: flashcards,
+      },
+      matching: {
+        hasContent: hasMatchingContent,
+        count: matchingItems.length,
+        items: matchingItems,
+      },
+    });
+  }, [
+    questions,
+    flashcards,
+    matchingItems,
+    hasQuizContent,
+    hasFlashcardsContent,
+    hasMatchingContent,
+  ]);
+
+  // Add validation for matching items when they change
+  const processedItemsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (matchingItems.length === 0) {
+      // Reset the processed items set when there are no items
+      processedItemsRef.current = new Set();
+      return;
+    }
+
+    // Create a unique key for this set of items to avoid reprocessing
+    const itemsKey = matchingItems
+      .map((item) => item?.id || 'undefined')
+      .join(',');
+
+    // Skip if we've already processed these exact items
+    if (processedItemsRef.current.has(itemsKey)) {
+      return;
+    }
+
+    // Check if all matching items have the required properties
+    const validItems = matchingItems.every(
+      (item) => item && item.id && item.term && item.definition
+    );
+
+    if (!validItems) {
+      console.error('Invalid matching items detected:', matchingItems);
+      // Filter out invalid items
+      const filteredItems = matchingItems.filter(
+        (item) => item && item.id && item.term && item.definition
+      );
+
+      if (
+        filteredItems.length > 0 &&
+        filteredItems.length !== matchingItems.length
+      ) {
+        console.log('Setting filtered matching items:', filteredItems);
+
+        // Mark these items as processed
+        const newItemsKey = filteredItems.map((item) => item.id).join(',');
+        processedItemsRef.current.add(newItemsKey);
+
+        setMatchingItems(filteredItems);
+      } else if (filteredItems.length === 0) {
+        console.error('No valid matching items found after filtering');
+        setMatchingItems([]);
+      }
+    }
+
+    // Mark these items as processed
+    processedItemsRef.current.add(itemsKey);
+  }, [matchingItems]);
 
   // Determine if we're loading based on the current mode
-  const isLoading =
-    (learningMode === 'quiz' && isLoadingQuiz) ||
-    (learningMode === 'flashcards' && isLoadingFlashcards) ||
-    (learningMode === 'matching' && isLoadingMatching);
+  const isGenerating = {
+    quiz: isLoadingQuiz,
+    flashcards: isLoadingFlashcards,
+    matching: isLoadingMatching,
+  };
 
-  // Determine the progress based on the current mode
-  const progress =
-    learningMode === 'quiz'
-      ? quizProgress
-      : learningMode === 'flashcards'
-      ? flashcardsProgress
-      : matchingProgress;
+  const hasContent = {
+    quiz: hasQuizContent,
+    flashcards: hasFlashcardsContent,
+    matching: hasMatchingContent,
+  };
 
-  if (showQuiz) {
+  // Determine the overall progress
+  const overallProgress =
+    (quizProgress + flashcardsProgress + matchingProgress) / 3;
+
+  // Render the learning content based on the selected mode
+  const renderLearningContent = () => {
+    console.log('Rendering content for mode:', learningMode, {
+      hasQuizContent,
+      hasFlashcardsContent,
+      hasMatchingContent,
+      quizLength: questions.length,
+      flashcardsLength: flashcards.length,
+      matchingLength: matchingItems.length,
+    });
+
+    if (learningMode === 'quiz' && questions.length > 0) {
+      return <Quiz title={title} questions={questions} clearPDF={clearPDF} />;
+    }
+
+    if (learningMode === 'flashcards' && flashcards.length > 0) {
+      console.log('Rendering flashcards component with items:', flashcards);
+      return (
+        <Flashcards title={title} flashcards={flashcards} clearPDF={clearPDF} />
+      );
+    }
+
+    console.log('matchingItems', matchingItems);
+
+    if (learningMode === 'matching' && matchingItems.length > 0) {
+      // Add additional validation to ensure matching items have the required properties
+      const validMatchingItems = matchingItems.every(
+        (item) => item && item.id && item.term && item.definition
+      );
+
+      console.log('Rendering matching component with items:', matchingItems);
+      console.log('Valid matching items:', validMatchingItems);
+
+      if (validMatchingItems) {
+        return (
+          <Matching
+            title={title}
+            matchingItems={matchingItems}
+            clearPDF={clearPDF}
+          />
+        );
+      } else {
+        console.error('Invalid matching items structure detected');
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
+            <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              Error with matching items
+            </h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              There was an issue with the generated matching items. Please try
+              uploading your PDF again.
+            </p>
+          </div>
+        );
+      }
+    }
+
+    // If the selected mode is still loading or doesn't have content yet
     return (
-      <>
-        <ModeSwitcher
-          currentMode={learningMode}
-          onModeChange={handleModeChange}
-        />
-        <Quiz
-          title={title ?? 'Quiz'}
-          questions={questions}
-          clearPDF={clearPDF}
-        />
-      </>
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
+        {isGenerating[learningMode] ? (
+          <>
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              Generating {learningMode}...
+            </h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              We&apos;re using AI to create personalized learning materials from
+              your PDF. This may take a moment.
+            </p>
+          </>
+        ) : (
+          <>
+            <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              No content available yet
+            </h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              The {learningMode} content is not available yet. Please wait for
+              it to be generated or try uploading a different PDF.
+            </p>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // If PDF is uploaded, show the learning interface
+  if (pdfUploaded) {
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="container mx-auto px-4 py-8">
+          <div className="mb-6 flex justify-between items-center">
+            <h1 className="text-3xl font-bold">{title}</h1>
+            <Button variant="outline" onClick={clearPDF}>
+              Upload New PDF
+            </Button>
+          </div>
+
+          <TabsNavigation
+            currentMode={learningMode}
+            onModeChange={handleModeChange}
+            isGenerating={isGenerating}
+            hasContent={hasContent}
+          />
+
+          {isProcessingAll && (
+            <div className="mb-8">
+              <div className="flex justify-between text-sm text-muted-foreground mb-2">
+                <span>Overall Progress</span>
+                <span>{Math.round(overallProgress)}%</span>
+              </div>
+              <Progress value={overallProgress} className="h-2" />
+            </div>
+          )}
+
+          <div className="bg-card border rounded-lg shadow-sm">
+            {renderLearningContent()}
+          </div>
+        </main>
+      </div>
     );
   }
 
-  if (showFlashcards) {
-    return (
-      <>
-        <ModeSwitcher
-          currentMode={learningMode}
-          onModeChange={handleModeChange}
-        />
-        <Flashcards
-          title={title ?? 'Flashcards'}
-          flashcards={flashcards}
-          clearPDF={clearPDF}
-        />
-      </>
-    );
-  }
-
-  if (showMatching) {
-    return (
-      <>
-        <ModeSwitcher
-          currentMode={learningMode}
-          onModeChange={handleModeChange}
-        />
-        <Matching
-          title={title ?? 'Matching Game'}
-          matchingItems={matchingItems}
-          clearPDF={clearPDF}
-        />
-      </>
-    );
-  }
-
+  // If no PDF is uploaded yet, show the upload interface
   return (
     <div
       className="min-h-[100dvh] w-full flex justify-center"
@@ -292,7 +512,6 @@ export default function ChatWithFiles() {
       onDrop={(e) => {
         e.preventDefault();
         setIsDragging(false);
-        console.log(e.dataTransfer.files);
         handleFileChange({
           target: { files: e.dataTransfer.files },
         } as React.ChangeEvent<HTMLInputElement>);
@@ -329,7 +548,7 @@ export default function ChatWithFiles() {
               PDF Learning Tool
             </CardTitle>
             <CardDescription className="text-base">
-              Upload a PDF to generate an interactive {learningMode} based on
+              Upload a PDF to generate interactive learning materials based on
               its content using the{' '}
               <Link href="https://sdk.vercel.ai">AI SDK</Link> and{' '}
               <Link href="https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai">
@@ -337,12 +556,6 @@ export default function ChatWithFiles() {
               </Link>
               .
             </CardDescription>
-          </div>
-          <div className="flex justify-center">
-            <ModeSwitcher
-              currentMode={learningMode}
-              onModeChange={handleModeChange}
-            />
           </div>
         </CardHeader>
         <CardContent>
@@ -372,54 +585,19 @@ export default function ChatWithFiles() {
               color="primary"
               variant="default"
               className="w-full"
-              disabled={files.length === 0 || isLoading}
+              disabled={files.length === 0 || isProcessingAll}
             >
-              {isLoading ? (
+              {isProcessingAll ? (
                 <span className="flex items-center space-x-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Generating {learningMode}...</span>
+                  <span>Processing PDF...</span>
                 </span>
               ) : (
-                `Generate ${
-                  learningMode.charAt(0).toUpperCase() + learningMode.slice(1)
-                }`
+                'Generate Learning Materials'
               )}
             </Button>
           </form>
         </CardContent>
-        {isLoading && (
-          <CardFooter className="flex flex-col space-y-4">
-            <div className="w-full space-y-1">
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Progress</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-            <div className="w-full space-y-2">
-              <div className="grid grid-cols-6 sm:grid-cols-4 items-center space-x-2 text-sm">
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    isLoading ? 'bg-yellow-500/50 animate-pulse' : 'bg-muted'
-                  }`}
-                />
-                <span className="text-muted-foreground text-center col-span-4 sm:col-span-2">
-                  {learningMode === 'quiz' && partialQuestions
-                    ? `Generating question ${partialQuestions.length + 1} of 4`
-                    : learningMode === 'flashcards' && partialFlashcards
-                    ? `Generating flashcard ${
-                        partialFlashcards.length + 1
-                      } of 8`
-                    : learningMode === 'matching' && partialMatching
-                    ? `Generating matching item ${
-                        partialMatching.length + 1
-                      } of 6`
-                    : `Analyzing PDF content`}
-                </span>
-              </div>
-            </div>
-          </CardFooter>
-        )}
       </Card>
     </div>
   );

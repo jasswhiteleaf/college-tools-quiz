@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, FileText, Check } from 'lucide-react';
+import { RefreshCw, Check } from 'lucide-react';
 import { MatchingItem } from '@/lib/schemas';
 import confetti from 'canvas-confetti';
+import { debugLog } from '@/lib/utils';
 
 type MatchingProps = {
   matchingItems: MatchingItem[];
@@ -16,8 +17,10 @@ export default function Matching({
   clearPDF,
   title = 'Matching Game',
 }: MatchingProps) {
-  const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
-  const [selectedDefinition, setSelectedDefinition] = useState<string | null>(
+  const [selectedTermItem, setSelectedTermItem] = useState<MatchingItem | null>(
+    null
+  );
+  const [selectedDefItem, setSelectedDefItem] = useState<MatchingItem | null>(
     null
   );
   const [matchedPairs, setMatchedPairs] = useState<string[]>([]);
@@ -27,8 +30,15 @@ export default function Matching({
   >([]);
   const [isComplete, setIsComplete] = useState(false);
 
+  // For debugging
+  useEffect(() => {
+    console.log('Matching items received:', matchingItems);
+  }, [matchingItems]);
+
   // Shuffle the terms and definitions
   useEffect(() => {
+    if (matchingItems.length === 0) return;
+
     const shuffleArray = (array: MatchingItem[]) => {
       const shuffled = [...array];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -40,6 +50,12 @@ export default function Matching({
 
     setShuffledTerms(shuffleArray(matchingItems));
     setShuffledDefinitions(shuffleArray(matchingItems));
+
+    // Reset state when new items are received
+    setSelectedTermItem(null);
+    setSelectedDefItem(null);
+    setMatchedPairs([]);
+    setIsComplete(false);
   }, [matchingItems]);
 
   // Check if the game is complete
@@ -58,43 +74,50 @@ export default function Matching({
     }
   }, [matchedPairs, matchingItems]);
 
-  const handleTermClick = (id: string) => {
-    if (matchedPairs.includes(id)) return;
-    setSelectedTerm(id);
+  const handleTermClick = (item: MatchingItem) => {
+    if (matchedPairs.includes(item.id)) return;
+    setSelectedTermItem(item);
   };
 
-  const handleDefinitionClick = (id: string) => {
-    if (matchedPairs.includes(id)) return;
-    setSelectedDefinition(id);
+  const handleDefinitionClick = (item: MatchingItem) => {
+    if (matchedPairs.includes(item.id)) return;
+    setSelectedDefItem(item);
   };
 
   // Check for matches
   useEffect(() => {
-    if (selectedTerm && selectedDefinition) {
-      if (selectedTerm === selectedDefinition) {
+    if (selectedTermItem && selectedDefItem) {
+      console.log('Checking match between:', selectedTermItem, selectedDefItem);
+
+      // Check if the IDs match (same item)
+      if (selectedTermItem.id === selectedDefItem.id) {
+        console.log('Match found!');
         // Match found
-        setMatchedPairs([...matchedPairs, selectedTerm]);
+        setMatchedPairs((prev) => [...prev, selectedTermItem.id]);
         // Reset selections
-        setSelectedTerm(null);
-        setSelectedDefinition(null);
+        setSelectedTermItem(null);
+        setSelectedDefItem(null);
       } else {
+        console.log('No match found');
         // No match, reset after a delay
         const timer = setTimeout(() => {
-          setSelectedTerm(null);
-          setSelectedDefinition(null);
+          setSelectedTermItem(null);
+          setSelectedDefItem(null);
         }, 1000);
         return () => clearTimeout(timer);
       }
     }
-  }, [selectedTerm, selectedDefinition, matchedPairs]);
+  }, [selectedTermItem, selectedDefItem]);
 
   const handleReset = () => {
-    setSelectedTerm(null);
-    setSelectedDefinition(null);
+    setSelectedTermItem(null);
+    setSelectedDefItem(null);
     setMatchedPairs([]);
     setIsComplete(false);
 
     // Reshuffle
+    if (matchingItems.length === 0) return;
+
     const shuffleArray = (array: MatchingItem[]) => {
       const shuffled = [...array];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -108,107 +131,105 @@ export default function Matching({
     setShuffledDefinitions(shuffleArray(matchingItems));
   };
 
+  if (matchingItems.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <p>
+          No matching items available. Please wait while we generate them...
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <main className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-3xl font-bold mb-8 text-center text-foreground">
-          {title}
-        </h1>
-
-        {isComplete ? (
-          <div className="text-center space-y-8">
-            <div className="bg-green-100 dark:bg-green-900/30 p-8 rounded-lg">
-              <h2 className="text-2xl font-bold text-green-700 dark:text-green-300 mb-4">
-                Congratulations!
-              </h2>
-              <p className="text-green-600 dark:text-green-400">
-                You&apos;ve successfully matched all the pairs!
-              </p>
-            </div>
-            <div className="flex justify-center space-x-4">
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="bg-muted hover:bg-muted/80"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" /> Play Again
-              </Button>
-              <Button
-                onClick={clearPDF}
-                className="bg-primary hover:bg-primary/90"
-              >
-                <FileText className="mr-2 h-4 w-4" /> Try Another PDF
-              </Button>
-            </div>
+    <div className="p-8">
+      {isComplete ? (
+        <div className="text-center space-y-8">
+          <div className="bg-green-100 dark:bg-green-900/30 p-8 rounded-lg">
+            <h2 className="text-2xl font-bold text-green-700 dark:text-green-300 mb-4">
+              Congratulations!
+            </h2>
+            <p className="text-green-600 dark:text-green-400">
+              You&apos;ve successfully matched all the pairs!
+            </p>
           </div>
-        ) : (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold mb-4">Terms</h2>
-                <div className="space-y-2">
-                  {shuffledTerms.map((item) => (
-                    <div
-                      key={`term-${item.id}`}
-                      className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                        matchedPairs.includes(item.id)
-                          ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                          : selectedTerm === item.id
-                          ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
-                          : 'bg-card border border-border hover:bg-accent'
-                      }`}
-                      onClick={() => handleTermClick(item.id)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span>{item.term}</span>
-                        {matchedPairs.includes(item.id) && (
-                          <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        )}
-                      </div>
+          <div className="flex justify-center">
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              className="bg-muted hover:bg-muted/80"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" /> Play Again
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold mb-4">Terms</h2>
+              <div className="space-y-2">
+                {shuffledTerms.map((item) => (
+                  <div
+                    key={`term-${item.id}`}
+                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                      matchedPairs.includes(item.id)
+                        ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                        : selectedTermItem?.id === item.id
+                        ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
+                        : 'bg-card border border-border hover:bg-accent'
+                    }`}
+                    onClick={() => handleTermClick(item)}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span>{item.term}</span>
+                      {matchedPairs.includes(item.id) && (
+                        <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold mb-4">Definitions</h2>
-                <div className="space-y-2">
-                  {shuffledDefinitions.map((item) => (
-                    <div
-                      key={`def-${item.id}`}
-                      className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                        matchedPairs.includes(item.id)
-                          ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                          : selectedDefinition === item.id
-                          ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
-                          : 'bg-card border border-border hover:bg-accent'
-                      }`}
-                      onClick={() => handleDefinitionClick(item.id)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span>{item.definition}</span>
-                        {matchedPairs.includes(item.id) && (
-                          <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                className="bg-muted hover:bg-muted/80"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" /> Reset
-              </Button>
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold mb-4">Definitions</h2>
+              <div className="space-y-2">
+                {shuffledDefinitions.map((item) => (
+                  <div
+                    key={`def-${item.id}`}
+                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                      matchedPairs.includes(item.id)
+                        ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                        : selectedDefItem?.id === item.id
+                        ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
+                        : 'bg-card border border-border hover:bg-accent'
+                    }`}
+                    onClick={() => handleDefinitionClick(item)}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span>{item.definition}</span>
+                      {matchedPairs.includes(item.id) && (
+                        <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        )}
-      </main>
+
+          <div className="flex justify-center">
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              className="bg-muted hover:bg-muted/80"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" /> Reset
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -36,8 +36,11 @@ export const flashcardsSchema = z.array(flashcardSchema).length(8);
 // Matching schema
 export const matchingItemSchema = z.object({
   id: z.string().describe('Unique identifier for the matching item'),
-  term: z.string().describe('The term to be matched'),
-  definition: z.string().describe('The definition that matches the term'),
+  term: z.string().min(1).describe('The term to be matched'),
+  definition: z
+    .string()
+    .min(1)
+    .describe('The definition that matches the term'),
 });
 
 export type MatchingItem = z.infer<typeof matchingItemSchema>;

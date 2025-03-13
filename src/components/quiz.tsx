@@ -2,14 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Check,
-  X,
-  RefreshCw,
-  FileText,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, X, RefreshCw } from 'lucide-react';
 import QuizScore from './score';
 import QuizReview from './quiz-overview';
 import { Question } from '@/lib/schemas';
@@ -133,87 +126,74 @@ export default function Quiz({
   const currentQuestion = questions[currentQuestionIndex];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <main className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-3xl font-bold mb-8 text-center text-foreground">
-          {title}
-        </h1>
-        <div className="relative">
-          {!isSubmitted && <Progress value={progress} className="h-1 mb-8" />}
-          <div className="min-h-[400px]">
-            {' '}
-            {/* Prevent layout shift */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={isSubmitted ? 'results' : currentQuestionIndex}
-                initial={{ opacity: 1 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                {!isSubmitted ? (
-                  <div className="space-y-8">
-                    <QuestionCard
-                      question={currentQuestion}
-                      selectedAnswer={answers[currentQuestionIndex]}
-                      onSelectAnswer={handleSelectAnswer}
-                      isSubmitted={isSubmitted}
-                      showCorrectAnswer={false}
-                    />
-                    <div className="flex justify-between items-center pt-4">
-                      <Button
-                        onClick={handlePreviousQuestion}
-                        disabled={currentQuestionIndex === 0}
-                        variant="ghost"
-                      >
-                        <ChevronLeft className="mr-2 h-4 w-4" /> Previous
-                      </Button>
-                      <span className="text-sm font-medium">
-                        {currentQuestionIndex + 1} / {questions.length}
-                      </span>
-                      <Button
-                        onClick={handleNextQuestion}
-                        disabled={answers[currentQuestionIndex] === null}
-                        variant="ghost"
-                      >
-                        {currentQuestionIndex === questions.length - 1
-                          ? 'Submit'
-                          : 'Next'}{' '}
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
+    <div className="p-8">
+      <div className="relative">
+        {!isSubmitted && <Progress value={progress} className="h-1 mb-8" />}
+        <div className="min-h-[400px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={isSubmitted ? 'results' : currentQuestionIndex}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {!isSubmitted ? (
+                <div className="space-y-8">
+                  <QuestionCard
+                    question={currentQuestion}
+                    selectedAnswer={answers[currentQuestionIndex]}
+                    onSelectAnswer={handleSelectAnswer}
+                    isSubmitted={isSubmitted}
+                    showCorrectAnswer={false}
+                  />
+                  <div className="flex justify-between items-center pt-4">
+                    <Button
+                      onClick={handlePreviousQuestion}
+                      disabled={currentQuestionIndex === 0}
+                      variant="ghost"
+                    >
+                      <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+                    </Button>
+                    <span className="text-sm font-medium">
+                      {currentQuestionIndex + 1} / {questions.length}
+                    </span>
+                    <Button
+                      onClick={handleNextQuestion}
+                      disabled={answers[currentQuestionIndex] === null}
+                      variant="ghost"
+                    >
+                      {currentQuestionIndex === questions.length - 1
+                        ? 'Submit'
+                        : 'Next'}{' '}
+                      <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
                   </div>
-                ) : (
-                  <div className="space-y-8">
-                    <QuizScore
-                      correctAnswers={score ?? 0}
-                      totalQuestions={questions.length}
-                    />
-                    <div className="space-y-12">
-                      <QuizReview questions={questions} userAnswers={answers} />
-                    </div>
-                    <div className="flex justify-center space-x-4 pt-4">
-                      <Button
-                        onClick={handleReset}
-                        variant="outline"
-                        className="bg-muted hover:bg-muted/80 w-full"
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" /> Reset Quiz
-                      </Button>
-                      <Button
-                        onClick={clearPDF}
-                        className="bg-primary hover:bg-primary/90 w-full"
-                      >
-                        <FileText className="mr-2 h-4 w-4" /> Try Another PDF
-                      </Button>
-                    </div>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  <QuizScore
+                    correctAnswers={score ?? 0}
+                    totalQuestions={questions.length}
+                  />
+                  <div className="space-y-12">
+                    <QuizReview questions={questions} userAnswers={answers} />
                   </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      onClick={handleReset}
+                      variant="outline"
+                      className="bg-muted hover:bg-muted/80"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" /> Reset Quiz
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
