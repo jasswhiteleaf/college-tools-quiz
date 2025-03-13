@@ -2,6 +2,19 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### API Keys Setup
+
+This application uses the Google Gemini API for generating quiz content. You need to set up an API key:
+
+1. Get a Google Gemini API key from [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key)
+2. Create a `.env.local` file in the root directory of the project
+3. Add your API key to the `.env.local` file:
+   ```
+   GOOGLE_API_KEY=your_google_gemini_api_key_here
+   ```
+
+### Development Server
+
 First, run the development server:
 
 ```bash
