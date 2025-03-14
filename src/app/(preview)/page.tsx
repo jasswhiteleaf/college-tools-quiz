@@ -588,7 +588,7 @@ export default function LearningTool() {
           />
 
           {isProcessingAll && (
-            <div className="mb-8">
+            <div className="mb-8 max-w-4xl mx-auto">
               <div className="flex justify-between text-sm text-muted-foreground mb-2">
                 <span>Overall Progress</span>
                 <span>{Math.round(overallProgress)}%</span>
@@ -597,7 +597,7 @@ export default function LearningTool() {
             </div>
           )}
 
-          <div className="bg-card border rounded-lg shadow-sm">
+          <div className="bg-card max-w-4xl mx-auto border border-zinc-200 border-border rounded-lg shadow-sm">
             {renderLearningContent()}
           </div>
         </main>
@@ -651,17 +651,10 @@ export default function LearningTool() {
             </div>
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-2xl font-bold">
-              PDF Learning Tool
-            </CardTitle>
+            <CardTitle className="text-2xl font-bold">Learning Tool</CardTitle>
             <CardDescription className="text-base">
               Upload a PDF to generate interactive learning materials based on
-              its content using the{' '}
-              <Link href="https://sdk.vercel.ai">AI SDK</Link> and{' '}
-              <Link href="https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai">
-                Google&apos;s Gemini Pro
-              </Link>
-              .
+              its content.
             </CardDescription>
           </div>
         </CardHeader>

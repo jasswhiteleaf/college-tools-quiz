@@ -29,6 +29,7 @@ export default function Matching({
     MatchingItem[]
   >([]);
   const [isComplete, setIsComplete] = useState(false);
+  const [wrongSelection, setWrongSelection] = useState(false);
 
   // For debugging
   useEffect(() => {
@@ -99,8 +100,12 @@ export default function Matching({
         setSelectedDefItem(null);
       } else {
         console.log('No match found');
-        // No match, reset after a delay
+        // No match, show wrong selection animation
+        setWrongSelection(true);
+
+        // Reset after a delay
         const timer = setTimeout(() => {
+          setWrongSelection(false);
           setSelectedTermItem(null);
           setSelectedDefItem(null);
         }, 1000);
@@ -114,6 +119,7 @@ export default function Matching({
     setSelectedDefItem(null);
     setMatchedPairs([]);
     setIsComplete(false);
+    setWrongSelection(false);
 
     // Reshuffle
     if (matchingItems.length === 0) return;
@@ -140,6 +146,17 @@ export default function Matching({
       </div>
     );
   }
+
+  // Animation variants for wrong selection
+  const wrongAnimationVariants = {
+    animate: {
+      y: [0, -10, 0],
+      transition: {
+        duration: 0.5,
+        ease: 'easeInOut',
+      },
+    },
+  };
 
   return (
     <div className="p-8">
@@ -168,52 +185,68 @@ export default function Matching({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Terms</h2>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2">
                 {shuffledTerms.map((item) => (
-                  <div
+                  <motion.div
                     key={`term-${item.id}`}
-                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                    animate={
+                      wrongSelection && selectedTermItem?.id === item.id
+                        ? 'animate'
+                        : ''
+                    }
+                    variants={wrongAnimationVariants}
+                    className={`p-4 rounded-lg cursor-pointer transition-colors min-h-[80px] flex items-center ${
                       matchedPairs.includes(item.id)
                         ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                        : selectedTermItem?.id === item.id && wrongSelection
+                        ? 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
                         : selectedTermItem?.id === item.id
                         ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
                         : 'bg-card border border-border hover:bg-accent'
                     }`}
                     onClick={() => handleTermClick(item)}
                   >
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center w-full">
                       <span>{item.term}</span>
                       {matchedPairs.includes(item.id) && (
                         <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
 
             <div className="space-y-4">
               <h2 className="text-xl font-semibold mb-4">Definitions</h2>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2">
                 {shuffledDefinitions.map((item) => (
-                  <div
+                  <motion.div
                     key={`def-${item.id}`}
-                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                    animate={
+                      wrongSelection && selectedDefItem?.id === item.id
+                        ? 'animate'
+                        : ''
+                    }
+                    variants={wrongAnimationVariants}
+                    className={`p-4 rounded-lg cursor-pointer transition-colors min-h-[80px] flex items-center ${
                       matchedPairs.includes(item.id)
                         ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+                        : selectedDefItem?.id === item.id && wrongSelection
+                        ? 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
                         : selectedDefItem?.id === item.id
                         ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
                         : 'bg-card border border-border hover:bg-accent'
                     }`}
                     onClick={() => handleDefinitionClick(item)}
                   >
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center w-full">
                       <span>{item.definition}</span>
                       {matchedPairs.includes(item.id) && (
                         <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

@@ -89,17 +89,17 @@ export default function Flashcards({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="w-full max-w-md"
+              className="w-full max-w-lg"
             >
               <div className="perspective-1000 w-full">
                 <div
-                  className={`relative w-full h-64 cursor-pointer transition-transform duration-500 transform-style-3d ${
+                  className={`relative w-full h-96 cursor-pointer transition-transform duration-500 transform-style-3d ${
                     isFlipped ? 'rotate-y-180' : ''
                   }`}
                   onClick={handleFlip}
                 >
                   <div
-                    className={`absolute w-full h-full backface-hidden bg-card border border-border rounded-lg p-6 flex flex-col justify-center items-center shadow-md ${
+                    className={`absolute w-full h-full backface-hidden bg-card border border-zinc-200 border-border rounded-lg p-6 flex flex-col justify-center items-center shadow-md ${
                       isFlipped ? 'hidden' : ''
                     }`}
                   >

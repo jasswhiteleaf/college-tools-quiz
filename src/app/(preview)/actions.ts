@@ -29,7 +29,7 @@ export const generateQuizTitle = async (file: string) => {
         ),
     }),
     prompt:
-      'Generate a title for a quiz based on the attached file content. Try and extract as much info from the file content as possible. If the file content is just numbers or incoherent, just return quiz.\n\n ' +
+      'Generate a title for a quiz based on the following (PDF) file name. Try and extract as much info from the file name as possible. If the file name is just numbers or incoherent, just return quiz.\n\n ' +
       file,
   });
   return result.object.title;
