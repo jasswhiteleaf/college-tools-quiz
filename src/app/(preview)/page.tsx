@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { experimental_useObject } from 'ai/react';
+import { experimental_useObject } from '@ai-sdk/react';
 import {
   questionsSchema,
   flashcardsSchema,
@@ -32,6 +32,7 @@ import { debugLog } from '@/lib/utils';
 
 export default function LearningTool() {
   const [files, setFiles] = useState<File[]>([]);
+  const [title, setTitle] = useState('Learning Content');
   const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>(
     []
   );
@@ -41,11 +42,13 @@ export default function LearningTool() {
   const [matchingItems, setMatchingItems] = useState<
     z.infer<typeof matchingItemsSchema>
   >([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [title, setTitle] = useState<string>('Learning Material');
   const [learningMode, setLearningMode] = useState<LearningMode>('flashcards');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('Analyzing PDF...');
   const [pdfUploaded, setPdfUploaded] = useState(false);
   const [isProcessingAll, setIsProcessingAll] = useState(false);
+  const [useOpenAI, setUseOpenAI] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Quiz generation
   const {
@@ -56,7 +59,7 @@ export default function LearningTool() {
     api: '/api/generate-quiz',
     schema: questionsSchema,
     initialValue: [],
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Quiz generation error:', error);
       toast.error('Failed to generate quiz. Please try again.');
     },
@@ -91,21 +94,23 @@ export default function LearningTool() {
     },
   });
 
-  // Matching generation
+  // Matching generation with Google
   const {
-    submit: submitMatching,
-    object: partialMatching,
-    isLoading: isLoadingMatching,
+    submit: submitMatchingGoogle,
+    object: partialMatchingGoogle,
+    isLoading: isLoadingMatchingGoogle,
   } = experimental_useObject({
     api: '/api/generate-matching',
     schema: matchingItemsSchema,
     initialValue: [],
     onError: (error) => {
-      console.error('Matching generation error:', error);
-      toast.error('Failed to generate matching game. Please try again.');
+      console.error('Matching generation error (Google):', error);
+      toast.error(
+        'Failed to generate matching game with Google AI. Please try again.'
+      );
     },
     onFinish: ({ object }) => {
-      console.log('Matching items generated:', object);
+      console.log('Matching items generated Object with Google:', object);
 
       // Handle potential undefined object
       if (!object) {
@@ -149,6 +154,86 @@ export default function LearningTool() {
       checkAllProcessingComplete();
     },
   });
+
+  // Matching generation with OpenAI
+  const {
+    submit: submitMatchingOpenAI,
+    object: partialMatchingOpenAI,
+    isLoading: isLoadingMatchingOpenAI,
+  } = experimental_useObject({
+    api: '/api/generate-matching-openai',
+    schema: matchingItemsSchema,
+    initialValue: [],
+    onError: (error) => {
+      console.error('Matching generation error (OpenAI):', error);
+      toast.error(
+        'Failed to generate matching game with OpenAI. Please try again.'
+      );
+    },
+    onFinish: ({ object }) => {
+      console.log('Matching items generated with OpenAI:', object);
+
+      // Handle potential undefined object
+      if (!object) {
+        console.error('Invalid matching items received: undefined');
+        setMatchingItems([]);
+        checkAllProcessingComplete();
+        return;
+      }
+
+      // Ensure object is an array
+      if (Array.isArray(object)) {
+        console.log(
+          `Setting ${object.length} matching items to state:`,
+          object
+        );
+
+        // Validate each item in the array
+        const validItems = object.filter(
+          (item) =>
+            item &&
+            typeof item === 'object' &&
+            item.id &&
+            typeof item.term === 'string' &&
+            item.term.length > 0 &&
+            typeof item.definition === 'string' &&
+            item.definition.length > 0
+        );
+
+        if (validItems.length > 0) {
+          setMatchingItems(validItems);
+          debugLog('Matching items set successfully:', validItems);
+        } else {
+          console.error('No valid matching items found in response');
+          setMatchingItems([]);
+        }
+      } else {
+        console.error('Invalid matching items received:', object);
+        setMatchingItems([]);
+      }
+
+      checkAllProcessingComplete();
+    },
+  });
+
+  // Combined submit function that chooses the appropriate API based on the useOpenAI state
+  const submitMatching = (data: any) => {
+    if (useOpenAI) {
+      return submitMatchingOpenAI(data);
+    } else {
+      return submitMatchingGoogle(data);
+    }
+  };
+
+  // Combined loading state
+  const isLoadingMatching = useOpenAI
+    ? isLoadingMatchingOpenAI
+    : isLoadingMatchingGoogle;
+
+  // Combined partial matching object
+  const partialMatching = useOpenAI
+    ? partialMatchingOpenAI
+    : partialMatchingGoogle;
 
   // Check if all processing is complete
   const checkAllProcessingComplete = () => {
@@ -213,6 +298,7 @@ export default function LearningTool() {
 
     setIsProcessingAll(true);
     setPdfUploaded(true);
+    setProcessingStep('Analyzing PDF...');
 
     const encodedFiles = await Promise.all(
       files.map(async (file) => ({
@@ -223,16 +309,23 @@ export default function LearningTool() {
     );
 
     // Generate title first
+    setProcessingStep('Generating title...');
     const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
     setTitle(generatedTitle);
 
     // Generate all learning materials in parallel
+    setProcessingStep('Generating quiz questions...');
     submitQuiz({ files: encodedFiles });
+
+    setProcessingStep('Generating flashcards...');
     submitFlashcards({ files: encodedFiles });
 
     // Add a small delay before submitting matching to avoid potential race conditions
     setTimeout(() => {
       console.log('Submitting matching generation request');
+      setProcessingStep(
+        `Generating matching game with ${useOpenAI ? 'OpenAI' : 'Google AI'}...`
+      );
       submitMatching({ files: encodedFiles });
     }, 1000); // Increased delay to 1 second
 
@@ -375,27 +468,39 @@ export default function LearningTool() {
 
   // Render the learning content based on the selected mode
   const renderLearningContent = () => {
-    console.log('Rendering content for mode:', learningMode, {
-      hasQuizContent,
-      hasFlashcardsContent,
-      hasMatchingContent,
-      quizLength: questions.length,
-      flashcardsLength: flashcards.length,
-      matchingLength: matchingItems.length,
-    });
+    if (isProcessingAll) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <h3 className="text-xl font-semibold mb-2">Processing your PDF</h3>
+          <p className="text-muted-foreground text-center max-w-md">
+            {processingStep || 'Analyzing PDF...'}
+          </p>
+        </div>
+      );
+    }
 
-    if (learningMode === 'quiz' && questions.length > 0) {
-      return <Quiz title={title} questions={questions} clearPDF={clearPDF} />;
+    if (!pdfUploaded) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
+          <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-xl font-semibold mb-2">No PDF uploaded yet</h3>
+          <p className="text-muted-foreground text-center max-w-md">
+            Upload a PDF document to generate learning content.
+          </p>
+        </div>
+      );
     }
 
     if (learningMode === 'flashcards' && flashcards.length > 0) {
-      console.log('Rendering flashcards component with items:', flashcards);
       return (
         <Flashcards title={title} flashcards={flashcards} clearPDF={clearPDF} />
       );
     }
 
-    console.log('matchingItems', matchingItems);
+    if (learningMode === 'quiz' && questions.length > 0) {
+      return <Quiz title={title} questions={questions} clearPDF={clearPDF} />;
+    }
 
     if (learningMode === 'matching' && matchingItems.length > 0) {
       // Add additional validation to ensure matching items have the required properties
@@ -409,7 +514,9 @@ export default function LearningTool() {
       if (validMatchingItems) {
         return (
           <Matching
-            title={title}
+            title={`${title} (Generated by ${
+              useOpenAI ? 'OpenAI' : 'Google AI'
+            })`}
             matchingItems={matchingItems}
             clearPDF={clearPDF}
           />

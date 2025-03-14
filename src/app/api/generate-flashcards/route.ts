@@ -8,6 +8,14 @@ export const maxDuration = 60;
 const googleApiKey = process.env.GOOGLE_API_KEY;
 
 export async function POST(req: Request) {
+  // return new Response(
+  //   JSON.stringify({
+  //     error:
+  //       'Google API key is not configured. Please set GOOGLE_API_KEY in your environment variables.',
+  //   }),
+  //   { status: 500 }
+  // );
+
   const { files } = await req.json();
   const firstFile = files[0].data;
 

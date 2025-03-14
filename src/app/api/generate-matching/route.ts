@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         definition: matchingItemSchema.shape.definition,
       });
 
-    // Use the streamObject directly and return its response
+    // Create a custom stream handler that adds IDs to the items
     const result = streamObject({
       model: googleProvider('gemini-1.5-pro-latest'),
       messages: [
@@ -66,48 +66,57 @@ export async function POST(req: Request) {
       ],
       schema: matchingItemWithoutIdSchema,
       output: 'array',
-      onFinish: ({ object }) => {
-        if (!object || !Array.isArray(object) || object.length === 0) {
-          console.error(
-            'Failed to generate matching items: Empty or invalid response'
-          );
-          return;
-        }
-
-        // Add IDs to each matching item and ensure all required fields are present
-        const objectWithIds = object
-          .map((item: any) => {
-            // Ensure item has all required fields
-            if (!item.term || !item.definition) {
-              console.error('Invalid matching item:', item);
-              return null;
-            }
-
-            return {
-              ...item,
-              id: uuidv4(),
-              // Ensure term and definition are strings and not empty
-              term: typeof item.term === 'string' ? item.term : 'Unknown term',
-              definition:
-                typeof item.definition === 'string'
-                  ? item.definition
-                  : 'Unknown definition',
-            };
-          })
-          .filter(Boolean); // Remove any null items
-
-        console.log('Generated matching items:', objectWithIds);
-
-        // Validate the generated items
-        const res = matchingItemsSchema.safeParse(objectWithIds);
-        if (res.error) {
-          console.error('Validation error:', res.error.errors);
-        }
-      },
     });
 
-    // Return the stream response directly
-    return result.toTextStreamResponse();
+    // Create a custom stream that adds IDs to each item
+    const { textStream } = result;
+    let jsonText = '';
+
+    // Collect the JSON text
+    for await (const chunk of textStream) {
+      jsonText += chunk;
+    }
+
+    // Parse the complete JSON and add IDs
+    try {
+      const items = JSON.parse(jsonText);
+
+      if (!Array.isArray(items)) {
+        throw new Error('Expected an array of items');
+      }
+
+      // Add IDs to each item
+      const itemsWithIds = items
+        .map((item) => {
+          if (!item || !item.term || !item.definition) {
+            return null;
+          }
+
+          return {
+            ...item,
+            id: uuidv4(),
+            term: typeof item.term === 'string' ? item.term : 'Unknown term',
+            definition:
+              typeof item.definition === 'string'
+                ? item.definition
+                : 'Unknown definition',
+          };
+        })
+        .filter(Boolean);
+
+      console.log('Generated matching items with IDs:', itemsWithIds);
+
+      // Return the items with IDs
+      return new Response(JSON.stringify(itemsWithIds), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('Error processing matching items:', error);
+      return new Response(
+        JSON.stringify({ error: 'Failed to process matching items' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
   } catch (error) {
     console.error('Error in generate-matching route:', error);
     return new Response(

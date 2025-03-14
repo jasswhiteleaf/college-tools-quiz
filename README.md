@@ -4,14 +4,25 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ### API Keys Setup
 
-This application uses the Google Gemini API for generating quiz content. You need to set up an API key:
+This application uses AI APIs for generating quiz content. You need to set up API keys:
 
 1. Get a Google Gemini API key from [Google AI Studio](https://ai.google.dev/gemini-api/docs/api-key)
-2. Create a `.env.local` file in the root directory of the project
-3. Add your API key to the `.env.local` file:
+2. Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+3. Create a `.env.local` file in the root directory of the project
+4. Add your API keys to the `.env.local` file:
    ```
    GOOGLE_API_KEY=your_google_gemini_api_key_here
+   OPENAI_API_KEY=your_openai_api_key_here
    ```
+
+### AI Provider Options
+
+This application supports multiple AI providers for generating learning content:
+
+- **Google Gemini**: Used for generating quiz questions, flashcards, and matching items
+- **OpenAI**: Can be used as an alternative for generating matching items
+
+When using the matching game feature, you can select which AI provider to use from the dropdown menu.
 
 ### Development Server
 
