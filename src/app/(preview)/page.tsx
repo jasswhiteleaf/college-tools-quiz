@@ -42,18 +42,12 @@ import { useLearningToolState } from './hooks/useLearningToolState';
 
 /**
  * LearningTool Component
- *
- * This component provides a user interface for uploading PDFs and generating
- * learning materials (quizzes, flashcards, and matching games) using AI.
- *
- * The component uses a reducer pattern for state management, with the reducer logic
- * extracted to a separate file for better maintainability.
  */
 export default function LearningTool() {
-  // Use the custom hook for state management
+  // state management
   const { state, dispatch } = useLearningToolState();
 
-  // Extract state variables for easier access
+  // state variables
   const {
     files,
     title,
@@ -68,10 +62,10 @@ export default function LearningTool() {
     isDragging,
   } = state;
 
-  // Keep a reference for processed matching items
+  // processed matching items
   const processedItemsRef = useRef<Set<string>>(new Set());
 
-  // Track completion status for each generation process
+  // completion status
   const completionStatusRef = useRef({
     quiz: false,
     flashcards: false,
@@ -79,7 +73,7 @@ export default function LearningTool() {
   });
 
   /**
-   * Checks if all processing is complete and updates the state accordingly
+   * checks if all processing is complete and updates the state accordingly
    */
   const checkAllProcessingComplete = useCallback(() => {
     const { quiz, flashcards, matching } = completionStatusRef.current;
@@ -104,7 +98,7 @@ export default function LearningTool() {
   }, [dispatch]);
 
   /**
-   * Callback handlers for quiz generation
+   * quiz generation
    */
   const handleQuizSuccess = useCallback(
     (data: z.infer<typeof questionsSchema>) => {
@@ -119,7 +113,7 @@ export default function LearningTool() {
   }, [checkAllProcessingComplete]);
 
   /**
-   * Callback handlers for flashcards generation
+   * flashcards generation
    */
   const handleFlashcardsSuccess = useCallback(
     (data: z.infer<typeof flashcardsSchema>) => {
@@ -134,7 +128,7 @@ export default function LearningTool() {
   }, [checkAllProcessingComplete]);
 
   /**
-   * Callback handlers for matching items generation
+   * matching items generation
    */
   const handleMatchingSuccess = useCallback(
     (data: z.infer<typeof matchingItemsSchema>) => {
@@ -148,7 +142,7 @@ export default function LearningTool() {
     checkAllProcessingComplete();
   }, [checkAllProcessingComplete]);
 
-  // Use custom hooks for generation
+  // quiz generation
   const {
     submit: submitQuiz,
     partialQuestions,
@@ -158,6 +152,7 @@ export default function LearningTool() {
     onComplete: handleQuizComplete,
   });
 
+  // flashcards generation
   const {
     submit: submitFlashcards,
     partialFlashcards,
@@ -167,6 +162,7 @@ export default function LearningTool() {
     onComplete: handleFlashcardsComplete,
   });
 
+  // matching items generation
   const {
     submit: submitMatchingGoogle,
     partialMatching: partialMatchingGoogle,
@@ -177,6 +173,7 @@ export default function LearningTool() {
     onComplete: handleMatchingComplete,
   });
 
+  // matching items generation
   const {
     submit: submitMatchingOpenAI,
     partialMatching: partialMatchingOpenAI,
@@ -188,7 +185,7 @@ export default function LearningTool() {
   });
 
   /**
-   * Combined submit function that chooses the appropriate API based on the useOpenAI state
+   * combined submit function that chooses the appropriate API based on the useOpenAI state
    */
   const submitMatching = (data: any) => {
     if (useOpenAI) {
@@ -198,18 +195,18 @@ export default function LearningTool() {
     }
   };
 
-  // Combined loading state
+  // combined loading state
   const isLoadingMatching = useOpenAI
     ? isLoadingMatchingOpenAI
     : isLoadingMatchingGoogle;
 
-  // Combined partial matching object
+  // combined partial matching object
   const partialMatching = useOpenAI
     ? partialMatchingOpenAI
     : partialMatchingGoogle;
 
   /**
-   * Handles file selection from the file input or drag and drop
+   * handles file selection from the file input or drag and drop
    */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isSafariBrowser() && isDragging) {
@@ -230,7 +227,7 @@ export default function LearningTool() {
   };
 
   /**
-   * Handles form submission and initiates the generation process
+   * handles form submission and initiates the generation process
    */
   const handleSubmitWithFiles = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -240,12 +237,12 @@ export default function LearningTool() {
       return;
     }
 
-    // Reset previous content
+    // reset previous content
     dispatch({ type: 'SET_QUESTIONS', payload: [] });
     dispatch({ type: 'SET_FLASHCARDS', payload: [] });
     dispatch({ type: 'SET_MATCHING_ITEMS', payload: [] });
 
-    // Reset completion status
+    // reset completion status
     completionStatusRef.current = {
       quiz: false,
       flashcards: false,
@@ -265,12 +262,12 @@ export default function LearningTool() {
         }))
       );
 
-      // Generate title first
+      // generate title first
       dispatch({ type: 'SET_PROCESSING_STEP', payload: 'Generating title...' });
       const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
       dispatch({ type: 'SET_TITLE', payload: generatedTitle });
 
-      // Generate all learning materials with controlled timing
+      // generate all learning materials with controlled timing
       await Promise.all([
         (async () => {
           dispatch({
@@ -287,7 +284,7 @@ export default function LearningTool() {
           return submitFlashcards({ files: encodedFiles });
         })(),
         (async () => {
-          // Small delay to avoid race conditions
+          // small delay to avoid race conditions
           await new Promise((resolve) => setTimeout(resolve, 500));
           dispatch({
             type: 'SET_PROCESSING_STEP',
@@ -310,21 +307,21 @@ export default function LearningTool() {
   };
 
   /**
-   * Resets the state to its initial values
+   * resets the state to its initial values
    */
   const clearPDF = () => {
     dispatch({ type: 'RESET_CONTENT' });
   };
 
   /**
-   * Handles learning mode changes (quiz, flashcards, matching)
+   * handles learning mode changes (quiz, flashcards, matching)
    */
   const handleModeChange = (mode: LearningMode) => {
     console.log(`Changing mode to: ${mode}`);
     dispatch({ type: 'SET_LEARNING_MODE', payload: mode });
   };
 
-  // Calculate progress for each mode
+  // calculate progress for each mode
   const quizProgress = partialQuestions
     ? (partialQuestions.length / 4) * 100
     : 0;
@@ -335,7 +332,7 @@ export default function LearningTool() {
     ? (partialMatching.length / 6) * 100
     : 0;
 
-  // Determine if each mode has content
+  // determine if each mode has content
   const hasQuizContent = questions.length > 0;
   const hasFlashcardsContent = flashcards.length > 0;
   const hasMatchingContent =
@@ -344,7 +341,7 @@ export default function LearningTool() {
       (item) => item && item.id && item.term && item.definition
     );
 
-  // Log detailed content information
+  // log detailed content information
   useEffect(() => {
     console.log('Content details:', {
       quiz: {
@@ -373,33 +370,33 @@ export default function LearningTool() {
   ]);
 
   /**
-   * Validates matching items when they change to ensure they have the required properties
+   * validates matching items when they change to ensure they have the required properties
    */
   useEffect(() => {
     if (matchingItems.length === 0) {
-      // Reset the processed items set when there are no items
+      // reset the processed items set when there are no items
       processedItemsRef.current = new Set();
       return;
     }
 
-    // Create a unique key for this set of items to avoid reprocessing
+    // create a unique key for this set of items to avoid reprocessing
     const itemsKey = matchingItems
       .map((item) => item?.id || 'undefined')
       .join(',');
 
-    // Skip if we've already processed these exact items
+    // skip if we've already processed these exact items
     if (processedItemsRef.current.has(itemsKey)) {
       return;
     }
 
-    // Check if all matching items have the required properties
+    // check if all matching items have the required properties
     const validItems = matchingItems.every(
       (item) => item && item.id && item.term && item.definition
     );
 
     if (!validItems) {
       console.error('Invalid matching items detected:', matchingItems);
-      // Filter out invalid items
+      // filter out invalid items
       const filteredItems = matchingItems.filter(
         (item) => item && item.id && item.term && item.definition
       );
@@ -410,7 +407,7 @@ export default function LearningTool() {
       ) {
         console.log('Setting filtered matching items:', filteredItems);
 
-        // Mark these items as processed
+        // mark these items as processed
         const newItemsKey = filteredItems.map((item) => item.id).join(',');
         processedItemsRef.current.add(newItemsKey);
 
@@ -421,11 +418,11 @@ export default function LearningTool() {
       }
     }
 
-    // Mark these items as processed
+    // mark these items as processed
     processedItemsRef.current.add(itemsKey);
   }, [matchingItems, dispatch]);
 
-  // Determine if we're loading based on the current mode
+  // determine if we're loading based on the current mode
   const isGenerating = {
     quiz: isLoadingQuiz,
     flashcards: isLoadingFlashcards,
@@ -438,12 +435,12 @@ export default function LearningTool() {
     matching: hasMatchingContent,
   };
 
-  // Determine the overall progress
+  // determine the overall progress
   const overallProgress =
     (quizProgress + flashcardsProgress + matchingProgress) / 3;
 
   /**
-   * Renders the appropriate learning content based on the current mode and state
+   * renders the appropriate learning content based on the current mode and state
    */
   const renderLearningContent = () => {
     if (isProcessingAll) {
@@ -516,7 +513,7 @@ export default function LearningTool() {
       }
     }
 
-    // If the selected mode is still loading or doesn't have content yet
+    // if the selected mode is still loading or doesn't have content yet
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
         {isGenerating[learningMode] ? (
@@ -546,7 +543,7 @@ export default function LearningTool() {
     );
   };
 
-  // If PDF is uploaded, show the learning interface
+  // if PDF is uploaded, show the learning interface
   if (pdfUploaded) {
     return (
       <div className="min-h-screen bg-background">
@@ -583,7 +580,7 @@ export default function LearningTool() {
     );
   }
 
-  // If no PDF is uploaded yet, show the upload interface
+  // if no PDF is uploaded yet, show the upload interface
   return (
     <div
       className="min-h-[100dvh] w-full flex justify-center"

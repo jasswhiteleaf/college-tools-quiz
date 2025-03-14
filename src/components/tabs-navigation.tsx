@@ -26,7 +26,7 @@ export default function TabsNavigation({
 }: TabsNavigationProps) {
   // Log the current state for debugging
   React.useEffect(() => {
-    console.log('TabsNavigation state', {
+    debugLog('TabsNavigation state', {
       currentMode,
       isGenerating,
       hasContent,
@@ -34,15 +34,15 @@ export default function TabsNavigation({
   }, [currentMode, isGenerating, hasContent]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto mb-8">
-      <div className="grid grid-cols-3 gap-4">
+    <div className="w-full max-w-4xl mx-auto mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <TabItem
           mode="flashcards"
           currentMode={currentMode}
           onModeChange={onModeChange}
           isGenerating={isGenerating.flashcards}
           hasContent={hasContent.flashcards}
-          icon={<BookOpen className="h-6 w-6" />}
+          icon={<BookOpen className="h-5 w-5" />}
           label="Flashcards"
         />
         <TabItem
@@ -51,7 +51,7 @@ export default function TabsNavigation({
           onModeChange={onModeChange}
           isGenerating={isGenerating.quiz}
           hasContent={hasContent.quiz}
-          icon={<FileText className="h-6 w-6" />}
+          icon={<FileText className="h-5 w-5" />}
           label="Test"
         />
         <TabItem
@@ -60,7 +60,7 @@ export default function TabsNavigation({
           onModeChange={onModeChange}
           isGenerating={isGenerating.matching}
           hasContent={hasContent.matching}
-          icon={<Layers className="h-6 w-6" />}
+          icon={<Layers className="h-5 w-5" />}
           label="Match"
         />
       </div>
@@ -76,6 +76,7 @@ type TabItemProps = {
   hasContent: boolean;
   icon: React.ReactNode;
   label: string;
+  badge?: string;
 };
 
 function TabItem({
@@ -86,11 +87,12 @@ function TabItem({
   hasContent,
   icon,
   label,
+  badge,
 }: TabItemProps) {
   const isActive = currentMode === mode;
 
   const handleClick = () => {
-    console.log(`Tab clicked: ${mode}`, { isGenerating, hasContent });
+    debugLog(`Tab clicked: ${mode}`, { isGenerating, hasContent });
     onModeChange(mode);
   };
 
@@ -98,22 +100,33 @@ function TabItem({
     <button
       onClick={handleClick}
       disabled={isGenerating}
-      className={`flex items-center justify-center p-4 rounded-lg transition-all ${
+      className={`cursor-pointer flex items-center justify-center px-4 py-2 rounded-lg transition-all ${
         isActive
-          ? 'bg-primary/10 text-primary'
+          ? 'bg-primary/10 text-primary border-b border-b-4 border-primary'
           : 'bg-card hover:bg-accent/50 text-muted-foreground hover:text-foreground'
       }`}
     >
-      <div className="flex flex-col items-center space-y-2">
-        <div className={`rounded-full p-2 ${isActive ? 'bg-primary/10' : ''}`}>
-          {icon}
+      <div className="text-left">
+        <div className="flex items-center gap-2">
+          <div
+            className={`flex-shrink-0 ${
+              isActive ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            {icon}
+          </div>
+          <span className="text-sm font-medium">{label}</span>
+          {badge && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
+              {badge}
+            </span>
+          )}
+          {isGenerating && (
+            <span className="text-xs text-muted-foreground animate-pulse">
+              Generating...
+            </span>
+          )}
         </div>
-        <span className="text-sm font-medium">{label}</span>
-        {isGenerating && (
-          <span className="text-xs text-muted-foreground animate-pulse">
-            Generating...
-          </span>
-        )}
       </div>
     </button>
   );
