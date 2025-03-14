@@ -47,7 +47,9 @@ export default function Flashcards({
   };
 
   const handleFlip = () => {
-    setIsFlipped(!isFlipped);
+    // setIsFlipped(!isFlipped);
+    setCurrentCardIndex(0);
+    setProgress(0);
   };
 
   const handleReset = () => {
