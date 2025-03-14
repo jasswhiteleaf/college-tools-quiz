@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { experimental_useObject } from '@ai-sdk/react';
+import { useEffect, useRef, useCallback } from 'react';
 import {
   questionsSchema,
   flashcardsSchema,
@@ -29,194 +28,168 @@ import { Link } from '@/components/ui/link';
 import { generateQuizTitle } from './actions';
 import { AnimatePresence, motion } from 'framer-motion';
 import { debugLog } from '@/lib/utils';
+import {
+  useQuizGeneration,
+  useFlashcardsGeneration,
+} from './hooks/useLearningGeneration';
+import { useMatchingGeneration } from './hooks/useMatchingGeneration';
+import {
+  encodeFileAsBase64,
+  isValidPdfFile,
+  isSafariBrowser,
+} from './utils/fileUtils';
+import { useLearningToolState } from './hooks/useLearningToolState';
 
+/**
+ * LearningTool Component
+ *
+ * This component provides a user interface for uploading PDFs and generating
+ * learning materials (quizzes, flashcards, and matching games) using AI.
+ *
+ * The component uses a reducer pattern for state management, with the reducer logic
+ * extracted to a separate file for better maintainability.
+ */
 export default function LearningTool() {
-  const [files, setFiles] = useState<File[]>([]);
-  const [title, setTitle] = useState('Learning Content');
-  const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>(
-    []
-  );
-  const [flashcards, setFlashcards] = useState<
-    z.infer<typeof flashcardsSchema>
-  >([]);
-  const [matchingItems, setMatchingItems] = useState<
-    z.infer<typeof matchingItemsSchema>
-  >([]);
-  const [learningMode, setLearningMode] = useState<LearningMode>('flashcards');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState('Analyzing PDF...');
-  const [pdfUploaded, setPdfUploaded] = useState(false);
-  const [isProcessingAll, setIsProcessingAll] = useState(false);
-  const [useOpenAI, setUseOpenAI] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  // Use the custom hook for state management
+  const { state, dispatch } = useLearningToolState();
 
-  // Quiz generation
+  // Extract state variables for easier access
+  const {
+    files,
+    title,
+    questions,
+    flashcards,
+    matchingItems,
+    learningMode,
+    processingStep,
+    pdfUploaded,
+    isProcessingAll,
+    useOpenAI,
+    isDragging,
+  } = state;
+
+  // Keep a reference for processed matching items
+  const processedItemsRef = useRef<Set<string>>(new Set());
+
+  // Track completion status for each generation process
+  const completionStatusRef = useRef({
+    quiz: false,
+    flashcards: false,
+    matching: false,
+  });
+
+  /**
+   * Checks if all processing is complete and updates the state accordingly
+   */
+  const checkAllProcessingComplete = useCallback(() => {
+    const { quiz, flashcards, matching } = completionStatusRef.current;
+
+    console.log('Checking processing status:', {
+      quiz,
+      flashcards,
+      matching,
+    });
+
+    if (quiz && flashcards && matching) {
+      dispatch({ type: 'SET_PROCESSING_ALL', payload: false });
+      toast.success('All learning materials generated!');
+
+      // Reset completion status for next run
+      completionStatusRef.current = {
+        quiz: false,
+        flashcards: false,
+        matching: false,
+      };
+    }
+  }, [dispatch]);
+
+  /**
+   * Callback handlers for quiz generation
+   */
+  const handleQuizSuccess = useCallback(
+    (data: z.infer<typeof questionsSchema>) => {
+      dispatch({ type: 'SET_QUESTIONS', payload: data });
+    },
+    [dispatch]
+  );
+
+  const handleQuizComplete = useCallback(() => {
+    completionStatusRef.current.quiz = true;
+    checkAllProcessingComplete();
+  }, [checkAllProcessingComplete]);
+
+  /**
+   * Callback handlers for flashcards generation
+   */
+  const handleFlashcardsSuccess = useCallback(
+    (data: z.infer<typeof flashcardsSchema>) => {
+      dispatch({ type: 'SET_FLASHCARDS', payload: data });
+    },
+    [dispatch]
+  );
+
+  const handleFlashcardsComplete = useCallback(() => {
+    completionStatusRef.current.flashcards = true;
+    checkAllProcessingComplete();
+  }, [checkAllProcessingComplete]);
+
+  /**
+   * Callback handlers for matching items generation
+   */
+  const handleMatchingSuccess = useCallback(
+    (data: z.infer<typeof matchingItemsSchema>) => {
+      dispatch({ type: 'SET_MATCHING_ITEMS', payload: data });
+    },
+    [dispatch]
+  );
+
+  const handleMatchingComplete = useCallback(() => {
+    completionStatusRef.current.matching = true;
+    checkAllProcessingComplete();
+  }, [checkAllProcessingComplete]);
+
+  // Use custom hooks for generation
   const {
     submit: submitQuiz,
-    object: partialQuestions,
+    partialQuestions,
     isLoading: isLoadingQuiz,
-  } = experimental_useObject({
-    api: '/api/generate-quiz',
-    schema: questionsSchema,
-    initialValue: [],
-    onError: (error: any) => {
-      console.error('Quiz generation error:', error);
-      toast.error('Failed to generate quiz. Please try again.');
-    },
-    onFinish: ({ object }) => {
-      console.log('Quiz generated:', object);
-      if (object && Array.isArray(object)) {
-        setQuestions(object);
-      }
-      checkAllProcessingComplete();
-    },
+  } = useQuizGeneration({
+    onSuccess: handleQuizSuccess,
+    onComplete: handleQuizComplete,
   });
 
-  // Flashcards generation
   const {
     submit: submitFlashcards,
-    object: partialFlashcards,
+    partialFlashcards,
     isLoading: isLoadingFlashcards,
-  } = experimental_useObject({
-    api: '/api/generate-flashcards',
-    schema: flashcardsSchema,
-    initialValue: [],
-    onError: (error) => {
-      console.error('Flashcards generation error:', error);
-      toast.error('Failed to generate flashcards. Please try again.');
-    },
-    onFinish: ({ object }) => {
-      console.log('Flashcards generated:', object);
-      if (object && Array.isArray(object)) {
-        setFlashcards(object);
-      }
-      checkAllProcessingComplete();
-    },
+  } = useFlashcardsGeneration({
+    onSuccess: handleFlashcardsSuccess,
+    onComplete: handleFlashcardsComplete,
   });
 
-  // Matching generation with Google
   const {
     submit: submitMatchingGoogle,
-    object: partialMatchingGoogle,
+    partialMatching: partialMatchingGoogle,
     isLoading: isLoadingMatchingGoogle,
-  } = experimental_useObject({
-    api: '/api/generate-matching',
-    schema: matchingItemsSchema,
-    initialValue: [],
-    onError: (error) => {
-      console.error('Matching generation error (Google):', error);
-      toast.error(
-        'Failed to generate matching game with Google AI. Please try again.'
-      );
-    },
-    onFinish: ({ object }) => {
-      console.log('Matching items generated Object with Google:', object);
-
-      // Handle potential undefined object
-      if (!object) {
-        console.error('Invalid matching items received: undefined');
-        setMatchingItems([]);
-        checkAllProcessingComplete();
-        return;
-      }
-
-      // Ensure object is an array
-      if (Array.isArray(object)) {
-        console.log(
-          `Setting ${object.length} matching items to state:`,
-          object
-        );
-
-        // Validate each item in the array
-        const validItems = object.filter(
-          (item) =>
-            item &&
-            typeof item === 'object' &&
-            item.id &&
-            typeof item.term === 'string' &&
-            item.term.length > 0 &&
-            typeof item.definition === 'string' &&
-            item.definition.length > 0
-        );
-
-        if (validItems.length > 0) {
-          setMatchingItems(validItems);
-          debugLog('Matching items set successfully:', validItems);
-        } else {
-          console.error('No valid matching items found in response');
-          setMatchingItems([]);
-        }
-      } else {
-        console.error('Invalid matching items received:', object);
-        setMatchingItems([]);
-      }
-
-      checkAllProcessingComplete();
-    },
+  } = useMatchingGeneration({
+    provider: 'google',
+    onSuccess: handleMatchingSuccess,
+    onComplete: handleMatchingComplete,
   });
 
-  // Matching generation with OpenAI
   const {
     submit: submitMatchingOpenAI,
-    object: partialMatchingOpenAI,
+    partialMatching: partialMatchingOpenAI,
     isLoading: isLoadingMatchingOpenAI,
-  } = experimental_useObject({
-    api: '/api/generate-matching-openai',
-    schema: matchingItemsSchema,
-    initialValue: [],
-    onError: (error) => {
-      console.error('Matching generation error (OpenAI):', error);
-      toast.error(
-        'Failed to generate matching game with OpenAI. Please try again.'
-      );
-    },
-    onFinish: ({ object }) => {
-      console.log('Matching items generated with OpenAI:', object);
-
-      // Handle potential undefined object
-      if (!object) {
-        console.error('Invalid matching items received: undefined');
-        setMatchingItems([]);
-        checkAllProcessingComplete();
-        return;
-      }
-
-      // Ensure object is an array
-      if (Array.isArray(object)) {
-        console.log(
-          `Setting ${object.length} matching items to state:`,
-          object
-        );
-
-        // Validate each item in the array
-        const validItems = object.filter(
-          (item) =>
-            item &&
-            typeof item === 'object' &&
-            item.id &&
-            typeof item.term === 'string' &&
-            item.term.length > 0 &&
-            typeof item.definition === 'string' &&
-            item.definition.length > 0
-        );
-
-        if (validItems.length > 0) {
-          setMatchingItems(validItems);
-          debugLog('Matching items set successfully:', validItems);
-        } else {
-          console.error('No valid matching items found in response');
-          setMatchingItems([]);
-        }
-      } else {
-        console.error('Invalid matching items received:', object);
-        setMatchingItems([]);
-      }
-
-      checkAllProcessingComplete();
-    },
+  } = useMatchingGeneration({
+    provider: 'openai',
+    onSuccess: handleMatchingSuccess,
+    onComplete: handleMatchingComplete,
   });
 
-  // Combined submit function that chooses the appropriate API based on the useOpenAI state
+  /**
+   * Combined submit function that chooses the appropriate API based on the useOpenAI state
+   */
   const submitMatching = (data: any) => {
     if (useOpenAI) {
       return submitMatchingOpenAI(data);
@@ -235,25 +208,11 @@ export default function LearningTool() {
     ? partialMatchingOpenAI
     : partialMatchingGoogle;
 
-  // Check if all processing is complete
-  const checkAllProcessingComplete = () => {
-    console.log('Checking processing status:', {
-      quiz: isLoadingQuiz,
-      flashcards: isLoadingFlashcards,
-      matching: isLoadingMatching,
-    });
-
-    if (!isLoadingQuiz && !isLoadingFlashcards && !isLoadingMatching) {
-      setIsProcessingAll(false);
-      toast.success('All learning materials generated!');
-    }
-  };
-
-  // Handle file selection
+  /**
+   * Handles file selection from the file input or drag and drop
+   */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-    if (isSafari && isDragging) {
+    if (isSafariBrowser() && isDragging) {
       toast.error(
         'Safari does not support drag & drop. Please use the file picker.'
       );
@@ -261,28 +220,18 @@ export default function LearningTool() {
     }
 
     const selectedFiles = Array.from(e.target.files || []);
-    const validFiles = selectedFiles.filter(
-      (file) => file.type === 'application/pdf' && file.size <= 5 * 1024 * 1024
-    );
+    const validFiles = selectedFiles.filter((file) => isValidPdfFile(file));
 
     if (validFiles.length !== selectedFiles.length) {
       toast.error('Only PDF files under 5MB are allowed.');
     }
 
-    setFiles(validFiles);
+    dispatch({ type: 'SET_FILES', payload: validFiles });
   };
 
-  // Encode file as base64
-  const encodeFileAsBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  // Handle form submission
+  /**
+   * Handles form submission and initiates the generation process
+   */
   const handleSubmitWithFiles = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -292,60 +241,87 @@ export default function LearningTool() {
     }
 
     // Reset previous content
-    setQuestions([]);
-    setFlashcards([]);
-    setMatchingItems([]);
+    dispatch({ type: 'SET_QUESTIONS', payload: [] });
+    dispatch({ type: 'SET_FLASHCARDS', payload: [] });
+    dispatch({ type: 'SET_MATCHING_ITEMS', payload: [] });
 
-    setIsProcessingAll(true);
-    setPdfUploaded(true);
-    setProcessingStep('Analyzing PDF...');
+    // Reset completion status
+    completionStatusRef.current = {
+      quiz: false,
+      flashcards: false,
+      matching: false,
+    };
 
-    const encodedFiles = await Promise.all(
-      files.map(async (file) => ({
-        name: file.name,
-        type: file.type,
-        data: await encodeFileAsBase64(file),
-      }))
-    );
+    dispatch({ type: 'SET_PROCESSING_ALL', payload: true });
+    dispatch({ type: 'SET_PDF_UPLOADED', payload: true });
+    dispatch({ type: 'SET_PROCESSING_STEP', payload: 'Analyzing PDF...' });
 
-    // Generate title first
-    setProcessingStep('Generating title...');
-    const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
-    setTitle(generatedTitle);
-
-    // Generate all learning materials in parallel
-    setProcessingStep('Generating quiz questions...');
-    submitQuiz({ files: encodedFiles });
-
-    setProcessingStep('Generating flashcards...');
-    submitFlashcards({ files: encodedFiles });
-
-    // Add a small delay before submitting matching to avoid potential race conditions
-    setTimeout(() => {
-      console.log('Submitting matching generation request');
-      setProcessingStep(
-        `Generating matching game with ${useOpenAI ? 'OpenAI' : 'Google AI'}...`
+    try {
+      const encodedFiles = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          type: file.type,
+          data: await encodeFileAsBase64(file),
+        }))
       );
-      submitMatching({ files: encodedFiles });
-    }, 1000); // Increased delay to 1 second
 
-    toast.info('Generating learning materials from your PDF...');
+      // Generate title first
+      dispatch({ type: 'SET_PROCESSING_STEP', payload: 'Generating title...' });
+      const generatedTitle = await generateQuizTitle(encodedFiles[0].name);
+      dispatch({ type: 'SET_TITLE', payload: generatedTitle });
+
+      // Generate all learning materials with controlled timing
+      await Promise.all([
+        (async () => {
+          dispatch({
+            type: 'SET_PROCESSING_STEP',
+            payload: 'Generating quiz questions...',
+          });
+          return submitQuiz({ files: encodedFiles });
+        })(),
+        (async () => {
+          dispatch({
+            type: 'SET_PROCESSING_STEP',
+            payload: 'Generating flashcards...',
+          });
+          return submitFlashcards({ files: encodedFiles });
+        })(),
+        (async () => {
+          // Small delay to avoid race conditions
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          dispatch({
+            type: 'SET_PROCESSING_STEP',
+            payload: `Generating matching game with ${
+              useOpenAI ? 'OpenAI' : 'Google AI'
+            }...`,
+          });
+          return submitMatching({ files: encodedFiles });
+        })(),
+      ]);
+
+      toast.info('Generating learning materials from your PDF...');
+    } catch (error) {
+      console.error('Error processing PDF:', error);
+      toast.error(
+        'An error occurred while processing your PDF. Please try again.'
+      );
+      dispatch({ type: 'SET_PROCESSING_ALL', payload: false });
+    }
   };
 
-  // Reset everything
+  /**
+   * Resets the state to its initial values
+   */
   const clearPDF = () => {
-    setFiles([]);
-    setQuestions([]);
-    setFlashcards([]);
-    setMatchingItems([]);
-    setPdfUploaded(false);
-    setTitle('Learning Material');
+    dispatch({ type: 'RESET_CONTENT' });
   };
 
-  // Handle mode change
+  /**
+   * Handles learning mode changes (quiz, flashcards, matching)
+   */
   const handleModeChange = (mode: LearningMode) => {
     console.log(`Changing mode to: ${mode}`);
-    setLearningMode(mode);
+    dispatch({ type: 'SET_LEARNING_MODE', payload: mode });
   };
 
   // Calculate progress for each mode
@@ -396,9 +372,9 @@ export default function LearningTool() {
     hasMatchingContent,
   ]);
 
-  // Add validation for matching items when they change
-  const processedItemsRef = useRef<Set<string>>(new Set());
-
+  /**
+   * Validates matching items when they change to ensure they have the required properties
+   */
   useEffect(() => {
     if (matchingItems.length === 0) {
       // Reset the processed items set when there are no items
@@ -438,16 +414,16 @@ export default function LearningTool() {
         const newItemsKey = filteredItems.map((item) => item.id).join(',');
         processedItemsRef.current.add(newItemsKey);
 
-        setMatchingItems(filteredItems);
+        dispatch({ type: 'SET_MATCHING_ITEMS', payload: filteredItems });
       } else if (filteredItems.length === 0) {
         console.error('No valid matching items found after filtering');
-        setMatchingItems([]);
+        dispatch({ type: 'SET_MATCHING_ITEMS', payload: [] });
       }
     }
 
     // Mark these items as processed
     processedItemsRef.current.add(itemsKey);
-  }, [matchingItems]);
+  }, [matchingItems, dispatch]);
 
   // Determine if we're loading based on the current mode
   const isGenerating = {
@@ -466,7 +442,9 @@ export default function LearningTool() {
   const overallProgress =
     (quizProgress + flashcardsProgress + matchingProgress) / 3;
 
-  // Render the learning content based on the selected mode
+  /**
+   * Renders the appropriate learning content based on the current mode and state
+   */
   const renderLearningContent = () => {
     if (isProcessingAll) {
       return (
@@ -611,14 +589,14 @@ export default function LearningTool() {
       className="min-h-[100dvh] w-full flex justify-center"
       onDragOver={(e) => {
         e.preventDefault();
-        setIsDragging(true);
+        dispatch({ type: 'SET_IS_DRAGGING', payload: true });
       }}
-      onDragExit={() => setIsDragging(false)}
-      onDragEnd={() => setIsDragging(false)}
-      onDragLeave={() => setIsDragging(false)}
+      onDragExit={() => dispatch({ type: 'SET_IS_DRAGGING', payload: false })}
+      onDragEnd={() => dispatch({ type: 'SET_IS_DRAGGING', payload: false })}
+      onDragLeave={() => dispatch({ type: 'SET_IS_DRAGGING', payload: false })}
       onDrop={(e) => {
         e.preventDefault();
-        setIsDragging(false);
+        dispatch({ type: 'SET_IS_DRAGGING', payload: false });
         handleFileChange({
           target: { files: e.dataTransfer.files },
         } as React.ChangeEvent<HTMLInputElement>);
