@@ -1,11 +1,6 @@
 import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  env: {
-    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  },
-};
+// Keep provider credentials server-only. Never expose them through `env`.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
